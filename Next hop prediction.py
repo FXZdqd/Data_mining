@@ -1,60 +1,67 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix
-import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import StandardScaler
 import pathlib
+
+def process_data(data):
+    # Step 1: 处理缺失值
+    data.ffill()  # 使用前一个值填充缺失值
+
+    # Step 2: 特征工程
+    data['time'] = pd.to_datetime(data['time'])
+    data['timestamp'] = data['time'].apply(lambda x: x.timestamp())
+
+    # 将 'coordinates' 列拆分为 'latitude' 和 'longitude' 两列
+    data['latitude'] = data['coordinates'].apply(lambda x: eval(x)[0] if pd.notnull(x) else np.nan)
+    data['longitude'] = data['coordinates'].apply(lambda x: eval(x)[1] if pd.notnull(x) else np.nan)
+
+    # Step 3: 归一化
+    scaler = StandardScaler()
+    data[['timestamp', 'latitude', 'longitude', 'speeds']] = scaler.fit_transform(
+        data[['timestamp', 'latitude', 'longitude', 'speeds']])
 
 # 读取CSV文件到pandas DataFrame并对数据进行预处理
 cwd = pathlib.Path.cwd()
-data = pd.read_csv(cwd / 'data' / 'traj.csv', index_col=0)
+train = pd.read_csv(cwd / 'data' / 'traj.csv', index_col=0)
+process_data(train)
 
-data['time'] = pd.to_datetime(data['time'])
-data['timestamp'] = data['time'].apply(lambda x: x.timestamp())
+# 数据拆分
+X = train[['timestamp', 'entity_id', 'traj_id', 'speeds', 'holidays']]
+y_coordinates = train[['latitude', 'longitude']]
+y_current_dis = train['current_dis']
 
-# 将 'coordinates' 列拆分为 'latitude' 和 'longitude' 两列
-data['latitude'] = data['coordinates'].apply(lambda x: eval(x)[0])
-data['longitude'] = data['coordinates'].apply(lambda x: eval(x)[1])
+X_train, X_test, y_coordinates_train, y_coordinates_test, y_current_dis_train, y_current_dis_test = train_test_split(
+    X, y_coordinates, y_current_dis, test_size=0.2, random_state=42
+)
 
-# 将轨迹点进行偏移以创建一个新的目标列进行预测
-data['next_latitude'] = data['latitude'].shift(-1)
-data['next_longitude'] = data['longitude'].shift(-1)
+# 选择模型
+model_coordinates = RandomForestRegressor()
+model_current_dis = RandomForestRegressor()
 
-# 删除由偏移创建的包含NaN值的最后一行
-data = data.dropna()
+# 训练
+model_coordinates.fit(X_train, y_coordinates_train)
+model_current_dis.fit(X_train, y_current_dis_train)
 
-# 将空间位置离散化为类别（这里简化为经纬度所在的象限）
-data['category'] = np.sign(data['next_latitude'] - data['latitude']).astype(str) + \
-                  np.sign(data['next_longitude'] - data['longitude']).astype(str)
+# 测试
+y_coordinates_pred = model_coordinates.predict(X_test)
+y_current_dis_pred = model_current_dis.predict(X_test)
 
-# 定义特征列和目标列
-feature_columns = ['latitude', 'longitude', 'current_dis', 'speeds', 'holidays', 'timestamp']
-target_column = 'category'
+# 评估
+mse_coordinates = mean_squared_error(y_coordinates_test, y_coordinates_pred)
+mse_current_dis = mean_squared_error(y_current_dis_test, y_current_dis_pred)
 
-# 将数据划分为训练集和测试集
-train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
+print(f'Mean Squared Error (coordinates): {mse_coordinates}')
+print(f'Mean Squared Error (current_dis): {mse_current_dis}')
 
-# 创建一个RandomForestClassifier模型
-model = RandomForestClassifier(n_estimators=100, random_state=42)
+# 对新数据进行预测
+new_data = pd.read_csv(cwd / 'data' / 'jump_task.csv', index_col=0)
+process_data(new_data)
 
-# 在训练集上训练模型
-model.fit(train_data[feature_columns], train_data[target_column])
+X_new = new_data[['timestamp', 'entity_id', 'traj_id', 'speeds', 'holidays']]
 
-# 在测试集上预测
-predictions = model.predict(test_data[feature_columns])
-
-# 计算准确率
-accuracy = accuracy_score(test_data[target_column], predictions)
-print(f"准确率：{accuracy}")
-
-# 打印混淆矩阵
-conf_matrix = confusion_matrix(test_data[target_column], predictions)
-print("混淆矩阵：")
-print(conf_matrix)
-
-# 预测新数据点的下一个轨迹点
-new_data_point = np.array([[116.461418, 39.920624, 0.323132219, 48.7275, 0, 0]])
-predicted_category = model.predict(new_data_point)
-
-print(f'预测的下一个轨迹点类别：{predicted_category}')
-predicted_category.to_csv('predict.txt', header=False, index=False)
+new_coordinates_pred = model_coordinates.predict(X_new)
+new_current_dis_pred = model_current_dis.predict(X_new)
+new_coordinates_pred.to_csv('predict.txt')
+new_current_dis_pred.to_csv('predict.txt')

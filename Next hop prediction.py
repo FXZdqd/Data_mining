@@ -57,3 +57,4 @@ new_data_point = np.array([[116.461418, 39.920624, 0.323132219, 48.7275, 0, 0]])
 predicted_category = model.predict(new_data_point)
 
 print(f'预测的下一个轨迹点类别：{predicted_category}')
+predicted_category.to_csv('predict.txt', header=False, index=False)

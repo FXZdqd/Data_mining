@@ -33,7 +33,7 @@ sklearn 1.3.2
 
 `pip install pandas`
 
-`pip install sklearn
+`pip install sklearn`
 
 3.运行结果
 

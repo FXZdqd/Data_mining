@@ -4,6 +4,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 import pathlib
+import numpy as np
+from ast import literal_eval
 
 def process_data(data):
     # Step 1: 处理缺失值
@@ -17,10 +19,6 @@ def process_data(data):
     data['latitude'] = data['coordinates'].apply(lambda x: eval(x)[0] if pd.notnull(x) else np.nan)
     data['longitude'] = data['coordinates'].apply(lambda x: eval(x)[1] if pd.notnull(x) else np.nan)
 
-    # Step 3: 归一化
-    scaler = StandardScaler()
-    data[['timestamp', 'latitude', 'longitude', 'speeds']] = scaler.fit_transform(
-        data[['timestamp', 'latitude', 'longitude', 'speeds']])
 
 # 读取CSV文件到pandas DataFrame并对数据进行预处理
 cwd = pathlib.Path.cwd()
@@ -29,6 +27,7 @@ process_data(train)
 
 # 数据拆分
 X = train[['timestamp', 'entity_id', 'traj_id', 'speeds', 'holidays']]
+
 y_coordinates = train[['latitude', 'longitude']]
 y_current_dis = train['current_dis']
 
@@ -62,6 +61,10 @@ process_data(new_data)
 X_new = new_data[['timestamp', 'entity_id', 'traj_id', 'speeds', 'holidays']]
 
 new_coordinates_pred = model_coordinates.predict(X_new)
-new_current_dis_pred = model_current_dis.predict(X_new)
-new_coordinates_pred.to_csv('predict.txt')
-new_current_dis_pred.to_csv('predict.txt')
+
+# Add the predicted coordinates to the new_data DataFrame
+new_data['latitude'] = new_coordinates_pred[:, 0]
+new_data['longitude'] = new_coordinates_pred[:, 1]
+
+# Save the results to predict.csv
+new_data.to_csv(cwd / 'predict.csv', index=False)

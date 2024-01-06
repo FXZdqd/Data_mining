@@ -26,13 +26,15 @@ for i in range(len_):
 dtw_distance_matrix += dtw_distance_matrix.T
 
 #选取特征并操纵
-df['dtw_distance'] = dtw_distance_matrix.mean(axis=1)
+dtw = dtw_distance_matrix.mean(axis=1)
+df = df.merge(dtw.reset_index(name='dtw'), on='traj_id')
 df['time'] = pd.to_datetime(df['time'])
-df['time_diff'] = df.groupby('traj_id')['time'].diff().dt.total_seconds()
+df['time'] = pd.to_datetime(df['time'])
+df['timestamp'] = df['time'].apply(lambda x: x.timestamp())
 traj_group_mean_speeds = df.groupby('traj_id')['speeds'].mean()
 df = df.merge(traj_group_mean_speeds.reset_index(name='mean_speed'), on='traj_id')
 
-features = ['longitude', 'latitude', 'dtw_distance', 'mean_speed', 'time_diff']
+features = ['longitude', 'latitude', 'dtw', 'mean_speed', 'timestamp']
 
 #标准化特征
 scaler = StandardScaler()
